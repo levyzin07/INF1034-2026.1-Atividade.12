@@ -170,3 +170,225 @@ while running:
     pygame.display.flip()
 
 pygame.quit()
+
+
+
+
+#######################################################################################################################################
+
+
+
+
+import pygame
+
+pygame.init()
+
+# ==========================
+# CONFIGURAÇÕES
+# ==========================
+
+WIDTH = 900
+HEIGHT = 600
+
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Mapa Top Down")
+
+clock = pygame.time.Clock()
+
+# ==========================
+# TILESET
+# ==========================
+
+tileset = pygame.image.load("tilemap.png").convert_alpha()
+
+TILE_SIZE = 32
+
+# Escolha dos tiles do seu tileset
+floor_tile = tileset.subsurface((0, 96, 32, 32))
+wall_tile = tileset.subsurface((0, 0, 32, 32))
+
+# ==========================
+# MAPA
+# ==========================
+
+map_data = [
+"WWWWWWWWWWWWWWWWWWWWWWWW",
+"WFFFFFFFFFFFFFFFFFFFFFFW",
+"WFFFFFFFFFFFFFFFFFFFFFFW",
+"WFFFFFWWWWWFFFFFFFFFFFFW",
+"WFFFFFWWWWWFFFFFFFFFFFFW",
+"WFFFFFFFFFFFFFFFFFFFFFFW",
+"WFFFFFFFFFFFFFFFFFFFFFFW",
+"WFFFFFWWWWWFFFFFFFFFFFFW",
+"WFFFFFFFFFFFFFFFFFFFFFFW",
+"WFFFFFFFFFFFFFFFFFFFFFFW",
+"WFFFFFFFFFWWWWWFFFFFFFFW",
+"WFFFFFFFFFWWWWWFFFFFFFFW",
+"WFFFFFFFFFFFFFFFFFFFFFFW",
+"WFFFFFFFFFFFFFFFFFFFFFFW",
+"WWWWWWWWWWWWWWWWWWWWWWWW"
+]
+
+# ==========================
+# COLISÕES DO MAPA
+# ==========================
+
+walls = []
+
+for row_index, row in enumerate(map_data):
+    for col_index, tile in enumerate(row):
+
+        if tile == "W":
+            walls.append(
+                pygame.Rect(
+                    col_index * TILE_SIZE,
+                    row_index * TILE_SIZE,
+                    TILE_SIZE,
+                    TILE_SIZE
+                )
+            )
+
+# ==========================
+# SPRITESHEET PERSONAGEM
+# ==========================
+
+sprite_sheet = pygame.image.load("espadachim.png").convert_alpha()
+
+FRAME_W = 64
+FRAME_H = 64
+
+animations = {
+    "down": [],
+    "left": [],
+    "right": [],
+    "up": []
+}
+
+for i in range(6):
+    animations["down"].append(
+        sprite_sheet.subsurface((i * FRAME_W, 0, FRAME_W, FRAME_H))
+    )
+
+for i in range(6):
+    animations["left"].append(
+        sprite_sheet.subsurface((i * FRAME_W, 64, FRAME_W, FRAME_H))
+    )
+
+for i in range(6):
+    animations["right"].append(
+        sprite_sheet.subsurface((i * FRAME_W, 128, FRAME_W, FRAME_H))
+    )
+
+for i in range(6):
+    animations["up"].append(
+        sprite_sheet.subsurface((i * FRAME_W, 192, FRAME_W, FRAME_H))
+    )
+
+# ==========================
+# PLAYER
+# ==========================
+
+player_rect = pygame.Rect(64, 64, 32, 32)
+
+speed = 4
+
+direction = "down"
+frame = 0
+animation_speed = 0.15
+
+# ==========================
+# LOOP PRINCIPAL
+# ==========================
+
+running = True
+
+while running:
+
+    clock.tick(60)
+
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+
+    old_x = player_rect.x
+    old_y = player_rect.y
+
+    keys = pygame.key.get_pressed()
+
+    moving = False
+
+    if keys[pygame.K_w]:
+        player_rect.y -= speed
+        direction = "up"
+        moving = True
+
+    if keys[pygame.K_s]:
+        player_rect.y += speed
+        direction = "down"
+        moving = True
+
+    if keys[pygame.K_a]:
+        player_rect.x -= speed
+        direction = "left"
+        moving = True
+
+    if keys[pygame.K_d]:
+        player_rect.x += speed
+        direction = "right"
+        moving = True
+
+    # ==========================
+    # COLISÃO
+    # ==========================
+
+    for wall in walls:
+        if player_rect.colliderect(wall):
+            player_rect.x = old_x
+            player_rect.y = old_y
+
+    # ==========================
+    # ANIMAÇÃO
+    # ==========================
+
+    if moving:
+        frame += animation_speed
+
+        if frame >= 6:
+            frame = 0
+    else:
+        frame = 0
+
+    current_sprite = animations[direction][int(frame)]
+
+    current_sprite = pygame.transform.scale(
+        current_sprite,
+        (32, 32)
+    )
+
+    # ==========================
+    # DESENHO
+    # ==========================
+
+    screen.fill((0, 0, 0))
+
+    # MAPA
+    for row_index, row in enumerate(map_data):
+        for col_index, tile in enumerate(row):
+
+            x = col_index * TILE_SIZE
+            y = row_index * TILE_SIZE
+
+            if tile == "W":
+                screen.blit(wall_tile, (x, y))
+            else:
+                screen.blit(floor_tile, (x, y))
+
+    # PERSONAGEM
+    screen.blit(
+        current_sprite,
+        (player_rect.x, player_rect.y)
+    )
+
+    pygame.display.flip()
+
+pygame.quit()
