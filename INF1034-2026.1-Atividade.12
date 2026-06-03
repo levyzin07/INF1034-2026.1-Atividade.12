@@ -1,268 +1,254 @@
 import pygame
-
+import sys
+import random
+ 
 pygame.init()
 
-# ==========================
-# CONFIGURAÇÕES
-# ==========================
 
+# CONFIGURAÇÕES
 WIDTH = 900
 HEIGHT = 600
-
+ 
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Mapa RPG Top Down")
-
+ 
 clock = pygame.time.Clock()
-
+ 
 TILE_SIZE = 32
 
-# ==========================
+
 # MAPA
-# ==========================
-
 map_data = [
-"WWWWWWWWWWWWWWWWWWWWWWWWWWWW",
-"WTTTTTTFFFFFFFFFFFFFFFFTTTTW",
-"WTTTTTTFFFFFFFFFFFFFFFFTTTTW",
-"WTTTTTTFFFFFFFFFFFFFFFFTTTTW",
-"WFFFFFFFFFFFFFFFFFFFFFFFFFFW",
-"WFFFFFFFFMMMMMMMMMMFFFFFFFFW",
-"WFFFFFFFMMMMMMMMMMMMFFFFFFFW",
-"WFFFFFFFMMMMMMMMMMMMFFFFFFFW",
-"WFFFFFFFMMMMMMMMMMMMFFFFFFFW",
-"WFFFFFFFMMMMMMMMMMMMFFFFFFFW",
-"WFFFFFFFMMMMMMMMMMMMFFFFFFFW",
-"WFFFFFFFFMMMMMMMMMMFFFFFFFFW",
-"WFFFFFFFFFFFFFFFFFFFFFFFFFFW",
-"WTTTTFFFFFFFFFFFFFFFFFFTTTTW",
-"WTTTTFFFFFFFFFFFFFFFFFFTTTTW",
-"WTTTTFFFFFFFFFFFFFFFFFFTTTTW",
-"WFFFFFFFFFFFFFFFFFFFFFFFFFFW",
-"WWWWWWWWWWWWWWWWWWWWWWWWWWWW"
+    "WWWWWWWWWWWWWWWWWWWWWWWWWWWW",
+    "WTTTTTTFFFFFFFFFFFFFFFFTTTTW",
+    "WTTTTTTFFFFFFFFFFFFFFFFTTTTW",
+    "WTTTTTTFFFFFFFFFFFFFFFFTTTTW",
+    "WFFFFFFFFFFFFFFFFFFFFFFFFFFW",
+    "WFFFFFFFFMMMMMMMMMMFFFFFFFFW",
+    "WFFFFFFFMMMMMMMMMMMMFFFFFFFW",
+    "WFFFFFFFMMMMMMMMMMMMFFFFFFFW",
+    "WFFFFFFFMMMMMMMMMMMMFFFFFFFW",
+    "WFFFFFFFMMMMMMMMMMMMFFFFFFFW",
+    "WFFFFFFFMMMMMMMMMMMMFFFFFFFW",
+    "WFFFFFFFFMMMMMMMMMMFFFFFFFFW",
+    "WFFFFFFFFFFFFFFFFFFFFFFFFFFW",
+    "WTTTTFFFFFFFFFFFFFFFFFFTTTTW",
+    "WTTTTFFFFFFFFFFFFFFFFFFTTTTW",
+    "WTTTTFFFFFFFFFFFFFFFFFFTTTTW",
+    "WFFFFFFFFFFFFFFFFFFFFFFFFFFW",
+    "WWWWWWWWWWWWWWWWWWWWWWWWWWWW",
 ]
+ 
+MAP_ROWS = len(map_data)
+MAP_COLS = len(map_data[0])
+ 
 
-# ==========================
 # COLISÕES
-# ==========================
-
 walls = []
-
+ 
 for row, line in enumerate(map_data):
     for col, tile in enumerate(line):
-
         if tile in ["W", "T", "M"]:
-
             walls.append(
-                pygame.Rect(
-                    col * TILE_SIZE,
-                    row * TILE_SIZE,
-                    TILE_SIZE,
-                    TILE_SIZE
-                )
+                pygame.Rect(col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE)
             )
+ 
 
-# ==========================
-# PERSONAGEM
-# ==========================
+# TILESETS
+tilemap_sheet = pygame.image.load("tilemap.png").convert_alpha()
+decorations_sheet = pygame.image.load("decorations.png").convert_alpha()
+ 
+def get_tile(sheet, col, row, tw=32, th=32):
+    """Extrai um tile do spritesheet."""
+    surf = pygame.Surface((tw, th), pygame.SRCALPHA)
+    surf.blit(sheet, (0, 0), (col * tw, row * th, tw, th))
+    return surf
+ 
+# ---- Tile de chão (areia/terra) - row 31 do tilemap ----
+floor_tile = get_tile(tilemap_sheet, 3, 31)
+ 
+# ---- Tile de parede/borda (pedra escura) - row 0 ----
+wall_tile = get_tile(tilemap_sheet, 4, 0)
+ 
+# ---- Tile de montanha (pedra interior) - row 2 ----
+mountain_tile = get_tile(tilemap_sheet, 4, 2)
+ 
+# ---- Tile de grama (verde) - row 32 ----
+grass_tile = get_tile(tilemap_sheet, 3, 32)
+ 
+# ---- Variações de chão para mais variedade visual ----
+floor_variants = [
+    get_tile(tilemap_sheet, 1, 31),
+    get_tile(tilemap_sheet, 2, 31),
+    get_tile(tilemap_sheet, 3, 31),
+    get_tile(tilemap_sheet, 4, 31),
+]
+ 
+# ---- Decorações: árvores da planilha de decorações ----
+# decorations.png: 320x432. Usando grid de 96x96
+# Árvores estão na linha 2 (y=192..288) - 3 variantes
+DECOR_W = 96
+DECOR_H = 96
+ 
+def get_decor(col, row):
+    surf = pygame.Surface((DECOR_W, DECOR_H), pygame.SRCALPHA)
+    surf.blit(decorations_sheet, (0, 0), (col * DECOR_W, row * DECOR_H, DECOR_W, DECOR_H))
+    return surf
+ 
+# Rochas (linhas 0-1) e árvores (linha 2-3) do spritesheet de decorações
+tree_sprites = [
+    get_decor(0, 2),  # árvore verde
+    get_decor(1, 2),  # árvore verde variante
+    get_decor(2, 2),  # árvore morta/seca
+]
+rock_sprites = [
+    get_decor(0, 0),
+    get_decor(1, 0),
+]
+ 
+# Escalar árvores para 2x2 tiles
+tree_size = TILE_SIZE * 2
+tree_scaled = [pygame.transform.scale(t, (tree_size, tree_size)) for t in tree_sprites]
+rock_scaled = [pygame.transform.scale(r, (TILE_SIZE, TILE_SIZE)) for r in rock_sprites]
 
-sprite_sheet = pygame.image.load(
-    "espadachim.png"
-).convert_alpha()
 
+# PRÉ-RENDERIZAR O MAPA (fundo estático)
+rng = random.Random(42)  # seed fixo para resultado determinante
+ 
+map_surface = pygame.Surface((MAP_COLS * TILE_SIZE, MAP_ROWS * TILE_SIZE))
+ 
+# desenhando todos os tiles de base
+for row, line in enumerate(map_data):
+    for col, tile in enumerate(line):
+        x = col * TILE_SIZE
+        y = row * TILE_SIZE
+ 
+        if tile == "F":
+            # Chão com pequena variação aleatória
+            variant = rng.randint(0, len(floor_variants) - 1)
+            map_surface.blit(floor_variants[variant], (x, y))
+        elif tile == "W":
+            map_surface.blit(floor_tile, (x, y))   # base de chão
+            map_surface.blit(wall_tile, (x, y))    # pedra por cima
+        elif tile == "M":
+            map_surface.blit(floor_tile, (x, y))   # base de chão
+            map_surface.blit(mountain_tile, (x, y))  # pedra de montanha
+        elif tile == "T":
+            map_surface.blit(grass_tile, (x, y))   # grama embaixo da árvore
+ 
+# desenhando decorações (árvores/rochas) por cima
+for row, line in enumerate(map_data):
+    for col, tile in enumerate(line):
+        x = col * TILE_SIZE
+        y = row * TILE_SIZE
+ 
+        if tile == "T":
+            variant = rng.randint(0, len(tree_scaled) - 1)
+            tree = tree_scaled[variant]
+            # Centralizar a sprite maior sobre o tile
+            offset_x = (TILE_SIZE - tree_size) // 2
+            offset_y = (TILE_SIZE - tree_size) // 2
+            map_surface.blit(tree, (x + offset_x, y + offset_y))
+ 
+# PERSONAGEM 
+sprite_sheet = pygame.image.load("espadachim.png").convert_alpha()
+ 
 FRAME_W = 64
 FRAME_H = 64
-
+ 
 animations = {
-    "down": [],
-    "left": [],
+    "down":  [],
+    "left":  [],
     "right": [],
-    "up": []
+    "up":    [],
 }
-
+ 
 for i in range(6):
-    animations["down"].append(
-        sprite_sheet.subsurface(
-            (i * FRAME_W, 0, FRAME_W, FRAME_H)
-        )
-    )
-
+    animations["down"].append(sprite_sheet.subsurface((i * FRAME_W, 0,   FRAME_W, FRAME_H)))
 for i in range(6):
-    animations["left"].append(
-        sprite_sheet.subsurface(
-            (i * FRAME_W, 64, FRAME_W, FRAME_H)
-        )
-    )
-
+    animations["left"].append(sprite_sheet.subsurface((i * FRAME_W, 64,  FRAME_W, FRAME_H)))
 for i in range(6):
-    animations["right"].append(
-        sprite_sheet.subsurface(
-            (i * FRAME_W, 128, FRAME_W, FRAME_H)
-        )
-    )
-
+    animations["right"].append(sprite_sheet.subsurface((i * FRAME_W, 128, FRAME_W, FRAME_H)))
 for i in range(6):
-    animations["up"].append(
-        sprite_sheet.subsurface(
-            (i * FRAME_W, 192, FRAME_W, FRAME_H)
-        )
-    )
+    animations["up"].append(sprite_sheet.subsurface((i * FRAME_W, 192, FRAME_W, FRAME_H)))
+ 
 
-# ==========================
 # PLAYER
-# ==========================
-
-player_rect = pygame.Rect(
-    400,
-    500,
-    32,
-    32
-)
-
+player_rect = pygame.Rect(400, 500, 32, 32)
+ 
 speed = 4
-
 direction = "down"
-
 frame = 0
 animation_speed = 0.15
+ 
 
-# ==========================
-# LOOP
-# ==========================
-
+# LOOP PRINCIPAL
 running = True
-
+ 
 while running:
-
+ 
     clock.tick(60)
-
+ 
     for event in pygame.event.get():
-
         if event.type == pygame.QUIT:
             running = False
-
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            running = False
+ 
     old_x = player_rect.x
     old_y = player_rect.y
-
+ 
     keys = pygame.key.get_pressed()
-
     moving = False
-
-    if keys[pygame.K_w]:
+ 
+    if keys[pygame.K_w] or keys[pygame.K_UP]:
         player_rect.y -= speed
         direction = "up"
         moving = True
-
-    if keys[pygame.K_s]:
+ 
+    if keys[pygame.K_s] or keys[pygame.K_DOWN]:
         player_rect.y += speed
         direction = "down"
         moving = True
-
-    if keys[pygame.K_a]:
+ 
+    if keys[pygame.K_a] or keys[pygame.K_LEFT]:
         player_rect.x -= speed
         direction = "left"
         moving = True
-
-    if keys[pygame.K_d]:
+ 
+    if keys[pygame.K_d] or keys[pygame.K_RIGHT]:
         player_rect.x += speed
         direction = "right"
         moving = True
-
-    # ==========================
+ 
     # COLISÃO
-    # ==========================
-
     for wall in walls:
-
         if player_rect.colliderect(wall):
-
             player_rect.x = old_x
             player_rect.y = old_y
             break
-
-    # ==========================
+ 
     # ANIMAÇÃO
-    # ==========================
-
     if moving:
-
         frame += animation_speed
-
         if frame >= 6:
             frame = 0
-
     else:
         frame = 0
-
+ 
     current_sprite = animations[direction][int(frame)]
-
-    current_sprite = pygame.transform.scale(
-        current_sprite,
-        (40, 40)
-    )
-
-    # ==========================
+    current_sprite = pygame.transform.scale(current_sprite, (40, 40))
+ 
     # DESENHO
-    # ==========================
-
     screen.fill((0, 0, 0))
-
-    for row, line in enumerate(map_data):
-        for col, tile in enumerate(line):
-
-            x = col * TILE_SIZE
-            y = row * TILE_SIZE
-
-            # chão
-            pygame.draw.rect(
-                screen,
-                (185, 145, 95),
-                (x, y, TILE_SIZE, TILE_SIZE)
-            )
-
-            # árvores
-            if tile == "T":
-
-                pygame.draw.circle(
-                    screen,
-                    (35, 150, 35),
-                    (x + 16, y + 16),
-                    14
-                )
-
-                pygame.draw.rect(
-                    screen,
-                    (110, 70, 30),
-                    (x + 12, y + 18, 8, 10)
-                )
-
-            # montanha
-            elif tile == "M":
-
-                pygame.draw.rect(
-                    screen,
-                    (140, 140, 140),
-                    (x, y, TILE_SIZE, TILE_SIZE)
-                )
-
-            # borda
-            elif tile == "W":
-
-                pygame.draw.rect(
-                    screen,
-                    (90, 90, 90),
-                    (x, y, TILE_SIZE, TILE_SIZE)
-                )
-
-    # personagem
-
-    screen.blit(
-        current_sprite,
-        (
-            player_rect.x - 4,
-            player_rect.y - 4
-        )
-    )
-
+ 
+    # Desenhar o mapa pré-renderizado
+    screen.blit(map_surface, (0, 0))
+ 
+    # Desenhar o personagem
+    screen.blit(current_sprite, (player_rect.x - 4, player_rect.y - 4))
+ 
     pygame.display.flip()
-
+ 
 pygame.quit()
+sys.exit()
